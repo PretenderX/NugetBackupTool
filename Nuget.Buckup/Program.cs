@@ -21,6 +21,30 @@ namespace Nuget.Buckup
             var backupPath = $"{workDir}\\Packages";
             var cachePackageRootPath = $"{workDir}\\Caches";
             var cachePackagesBatchBuilder = new StringBuilder();
+
+            if (baseUrl.ToLower().EndsWith("v3/index.json"))
+            {
+                Console.WriteLine("Detected v3 feed URL, try to find legacy v2 feed URL...");
+
+                var client = new RestClient(baseUrl)
+                {
+                    Authenticator = new NtlmAuthenticator(tfsUserName, tfsPwd)
+                };
+                var request = new RestRequest(Method.GET);
+                var response = client.Execute<NugetV3IndexJson>(request);
+
+                if (response.IsSuccessful)
+                {
+                    var v2Feed = response.Data.Resources.FirstOrDefault(r => r.Type.Contains("LegacyGallery/2.0.0"));
+
+                    if (v2Feed != null)
+                    {
+                        Console.WriteLine($"Found legacy v2 feed URL: {v2Feed.Id}");
+                        baseUrl = v2Feed.Id;
+                    }
+                }
+            }
+
             var packageRepository = PackageRepositoryFactory.Default.CreateRepository(baseUrl);
             var packages = packageRepository.GetPackages().ToList().Where(item => item.IsReleaseVersion());
 
