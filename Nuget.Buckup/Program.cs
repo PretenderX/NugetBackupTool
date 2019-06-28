@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -14,8 +15,8 @@ namespace Nuget.Buckup
         static void Main(string[] args)
         {
             var baseUrl = args[0];
-            var tfsUserName = args[1];
-            var tfsPwd = args[2];
+            var tfsUserName = args.Length > 1 ? args[1] : null;
+            var tfsPwd = args.Length > 2 ? args[2] : null;
             const string workDir = "Backup";
             const string packageHashAlgorithm = "sha512";
             var backupPath = $"{workDir}\\Packages";
@@ -43,10 +44,25 @@ namespace Nuget.Buckup
                         baseUrl = v2Feed.Id;
                     }
                 }
+                else
+                {
+                    Console.WriteLine($"Failed to find legacy v2 feed URL: {response.ErrorMessage}");
+                    return;
+                }
             }
 
-            var packageRepository = PackageRepositoryFactory.Default.CreateRepository(baseUrl);
-            var packages = packageRepository.GetPackages().ToList().Where(item => item.IsReleaseVersion());
+            IList<IPackage> packages;
+
+            try
+            {
+                var packageRepository = PackageRepositoryFactory.Default.CreateRepository(baseUrl);
+                packages = packageRepository.GetPackages().ToList();
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                return;
+            }
 
             if (!Directory.Exists(backupPath))
             {
