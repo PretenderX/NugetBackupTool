@@ -14,7 +14,7 @@ namespace Nuget.Backup
     {
         static void Main(string[] args)
         {
-            var baseUrl = args[0];
+            var indexJsonUrl = args[0];
             var tfsUserName = args.Length > 1 ? args[1] : null;
             var tfsPwd = args.Length > 2 ? args[2] : null;
             var workDir = $"Backup_{DateTime.Now:yyyyMMddHHmmss}";
@@ -35,11 +35,11 @@ namespace Nuget.Backup
                 Directory.CreateDirectory(cachePackageRootPath);
             }
 
-            if (baseUrl.ToLower().EndsWith("v3/index.json"))
+            if (indexJsonUrl.ToLower().EndsWith("v3/index.json"))
             {
                 Console.WriteLine("Detected v3 feed URL, try to find legacy v2 feed URL...");
 
-                var client = new RestClient(baseUrl)
+                var client = new RestClient(indexJsonUrl)
                 {
                     Authenticator = new NtlmAuthenticator(tfsUserName, tfsPwd)
                 };
@@ -49,19 +49,14 @@ namespace Nuget.Backup
 
                 if (response.IsSuccessful)
                 {
-                    using (var fileStream = File.Create($"{workDir}\\index.json"))
-                    {
-                        var bytes = Encoding.UTF8.GetBytes(response.Content);
-                        var ms = new MemoryStream(bytes);
-                        ms.CopyTo(fileStream);
-                    }
+                    SaveTextFile($"{workDir}\\index.json", response.Content);
 
                     var v2Feed = response.Data.Resources.FirstOrDefault(r => r.Type.Contains("LegacyGallery/2.0.0"));
 
                     if (v2Feed != null)
                     {
                         Console.WriteLine($"Found legacy v2 feed URL: {v2Feed.Id}");
-                        baseUrl = v2Feed.Id;
+                        indexJsonUrl = v2Feed.Id;
                     }
                 }
                 else
@@ -75,7 +70,7 @@ namespace Nuget.Backup
 
             try
             {
-                var packageRepository = PackageRepositoryFactory.Default.CreateRepository(baseUrl);
+                var packageRepository = PackageRepositoryFactory.Default.CreateRepository(indexJsonUrl);
                 packages = packageRepository.GetPackages().ToList();
             }
             catch (Exception e)
@@ -93,7 +88,7 @@ namespace Nuget.Backup
                 cachePackagesBatchBuilder.AppendLine($"nuget.exe install {package.Id} -OutputDirectory tempPackages -Version {package.Version} -NonInteractive");
                 publishPackagesBatchBuilder.AppendLine($"nuget.exe push -Source \"%source%\" -ApiKey %apiKey% {packageFolderName}\\{packageFileName}");
 
-                var request = new RestRequest(dataServicePackage.DownloadUrl.LocalPath, Method.GET)
+                var request = new RestRequest(dataServicePackage.DownloadUrl.PathAndQuery, Method.GET)
                 {
                     ResponseWriter = stream =>
                     {
@@ -118,20 +113,9 @@ namespace Nuget.Backup
                         File.Copy(downloadPackagePath, cachePackageFileName, true);
 
                         var sha512FileName = $"{cachePackageFileName}.{packageHashAlgorithm}";
-                        using (var fileStream = File.Create(sha512FileName))
-                        {
-                            var bytes = Encoding.UTF8.GetBytes(packageHash);
-                            var ms = new MemoryStream(bytes);
-                            ms.CopyTo(fileStream);
-                        }
+                        SaveTextFile(sha512FileName, packageHash);
                     }
                 };
-                dataServicePackage.DownloadUrl.Query.Remove(0, 1).Split('&').ToList()
-                    .ForEach(q =>
-                    {
-                        var kvStrings = q.Split('=');
-                        request.AddQueryParameter(kvStrings[0], kvStrings[1]);
-                    });
 
                 var restClient = new RestClient($"http://{dataServicePackage.DownloadUrl.Host}")
                 {
@@ -144,18 +128,18 @@ namespace Nuget.Backup
 
             cachePackagesBatchBuilder.AppendLine("rmdir /Q /S tempPackages");
 
-            using (var fileStream = File.Create($"{workDir}\\BuildNugetCacheBatch.bat"))
-            {
-                var bytes = Encoding.UTF8.GetBytes(cachePackagesBatchBuilder.ToString());
-                var ms = new MemoryStream(bytes);
-                ms.CopyTo(fileStream);
-            }
+            SaveTextFile($"{workDir}\\BuildNugetCacheBatch.bat", cachePackagesBatchBuilder.ToString());
+            SaveTextFile($"{workDir}\\PublishNugetPackagesBatch.bat", publishPackagesBatchBuilder.ToString());
+        }
 
-            using (var fileStream = File.Create($"{workDir}\\PublishNugetPackagesBatch.bat"))
+        private static void SaveTextFile(string path, string content)
+        {
+            using (var fileStream = File.Create(path))
             {
-                var bytes = Encoding.UTF8.GetBytes(publishPackagesBatchBuilder.ToString());
+                var bytes = Encoding.UTF8.GetBytes(content);
                 var ms = new MemoryStream(bytes);
                 ms.CopyTo(fileStream);
+                ms.Dispose();
             }
         }
     }
