@@ -17,11 +17,13 @@ namespace Nuget.Buckup
             var baseUrl = args[0];
             var tfsUserName = args.Length > 1 ? args[1] : null;
             var tfsPwd = args.Length > 2 ? args[2] : null;
-            const string workDir = "Backup";
+            var workDir = $"Backup_{DateTime.Now:yyyyMMddHHmmss}";
+            const string packageFolderName = "Packages";
             const string packageHashAlgorithm = "sha512";
-            var backupPath = $"{workDir}\\Packages";
+            var backupPath = $"{workDir}\\{packageFolderName}";
             var cachePackageRootPath = $"{workDir}\\Caches";
             var cachePackagesBatchBuilder = new StringBuilder();
+            var publishPackagesBatchBuilder = new StringBuilder("set source=%1\r\nset apiKey=%2\r\n");
 
             if (baseUrl.ToLower().EndsWith("v3/index.json"))
             {
@@ -31,6 +33,7 @@ namespace Nuget.Buckup
                 {
                     Authenticator = new NtlmAuthenticator(tfsUserName, tfsPwd)
                 };
+
                 var request = new RestRequest(Method.GET);
                 var response = client.Execute<NugetV3IndexJson>(request);
 
@@ -74,15 +77,16 @@ namespace Nuget.Buckup
                 Directory.CreateDirectory(cachePackageRootPath);
             }
 
-            foreach (var package in packages)
+            foreach (var package in packages.OrderBy(p => p.Id).ThenBy(p => p.Version))
             {
                 var dataServicePackage = (DataServicePackage)package;
                 var packageFileName = $"{package.Id}.{package.Version}.nupkg";
                 var downloadPackagePath = $"{backupPath}\\{packageFileName}";
 
                 cachePackagesBatchBuilder.AppendLine($"nuget.exe install {package.Id} -OutputDirectory tempPackages -Version {package.Version} -NonInteractive");
+                publishPackagesBatchBuilder.AppendLine($"nuget.exe push -Source \"%source%\" -ApiKey %apiKey% {packageFolderName}\\{packageFileName}");
 
-                var request = new RestRequest(dataServicePackage.DownloadUrl.Query, Method.GET)
+                var request = new RestRequest(dataServicePackage.DownloadUrl.LocalPath, Method.GET)
                 {
                     ResponseWriter = stream =>
                     {
@@ -122,7 +126,7 @@ namespace Nuget.Buckup
                         request.AddQueryParameter(kvStrings[0], kvStrings[1]);
                     });
 
-                var restClient = new RestClient(baseUrl)
+                var restClient = new RestClient($"http://{dataServicePackage.DownloadUrl.Host}")
                 {
                     Authenticator = new NtlmAuthenticator(tfsUserName, tfsPwd)
                 };
@@ -133,9 +137,16 @@ namespace Nuget.Buckup
 
             cachePackagesBatchBuilder.AppendLine("rmdir /Q /S tempPackages");
 
-            using (var fileStream = File.Create($"{workDir}\\BuildNugetCacheBatch_{DateTime.Now:yyyyMMddHHmmss}.bat"))
+            using (var fileStream = File.Create($"{workDir}\\BuildNugetCacheBatch.bat"))
             {
                 var bytes = Encoding.UTF8.GetBytes(cachePackagesBatchBuilder.ToString());
+                var ms = new MemoryStream(bytes);
+                ms.CopyTo(fileStream);
+            }
+
+            using (var fileStream = File.Create($"{workDir}\\PublishNugetPackagesBatch.bat"))
+            {
+                var bytes = Encoding.UTF8.GetBytes(publishPackagesBatchBuilder.ToString());
                 var ms = new MemoryStream(bytes);
                 ms.CopyTo(fileStream);
             }
