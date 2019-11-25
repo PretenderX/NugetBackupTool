@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using RestSharp.Deserializers;
 
-namespace Nuget.Buckup
+namespace Nuget.Backup
 {
     public class NugetV3IndexJson
     {

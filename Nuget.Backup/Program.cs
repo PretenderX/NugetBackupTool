@@ -8,7 +8,7 @@ using NuGet;
 using RestSharp;
 using RestSharp.Authenticators;
 
-namespace Nuget.Buckup
+namespace Nuget.Backup
 {
     class Program
     {

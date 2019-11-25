@@ -6,8 +6,8 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{083DFEA3-0122-48D1-91D3-D6F33E71E3DF}</ProjectGuid>
     <OutputType>Exe</OutputType>
-    <RootNamespace>Nuget.Buckup</RootNamespace>
-    <AssemblyName>Nuget.Buckup</AssemblyName>
+    <RootNamespace>Nuget.Backup</RootNamespace>
+    <AssemblyName>Nuget.Backup</AssemblyName>
     <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
