@@ -25,6 +25,16 @@ namespace Nuget.Buckup
             var cachePackagesBatchBuilder = new StringBuilder();
             var publishPackagesBatchBuilder = new StringBuilder("set source=%1\r\nset apiKey=%2\r\n");
 
+            if (!Directory.Exists(backupPath))
+            {
+                Directory.CreateDirectory(backupPath);
+            }
+
+            if (!Directory.Exists(cachePackageRootPath))
+            {
+                Directory.CreateDirectory(cachePackageRootPath);
+            }
+
             if (baseUrl.ToLower().EndsWith("v3/index.json"))
             {
                 Console.WriteLine("Detected v3 feed URL, try to find legacy v2 feed URL...");
@@ -39,6 +49,13 @@ namespace Nuget.Buckup
 
                 if (response.IsSuccessful)
                 {
+                    using (var fileStream = File.Create($"{workDir}\\index.json"))
+                    {
+                        var bytes = Encoding.UTF8.GetBytes(response.Content);
+                        var ms = new MemoryStream(bytes);
+                        ms.CopyTo(fileStream);
+                    }
+
                     var v2Feed = response.Data.Resources.FirstOrDefault(r => r.Type.Contains("LegacyGallery/2.0.0"));
 
                     if (v2Feed != null)
@@ -65,16 +82,6 @@ namespace Nuget.Buckup
             {
                 Console.WriteLine(e);
                 return;
-            }
-
-            if (!Directory.Exists(backupPath))
-            {
-                Directory.CreateDirectory(backupPath);
-            }
-
-            if (!Directory.Exists(cachePackageRootPath))
-            {
-                Directory.CreateDirectory(cachePackageRootPath);
             }
 
             foreach (var package in packages.OrderBy(p => p.Id).ThenBy(p => p.Version))
